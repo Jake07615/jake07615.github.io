@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+</head>
+<body>
+<title>Jake's Games</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  /* Layout: a left-aligned multiplayer server list, like the in-game menu. Hero on top, one row per server, the modpack server opens into a detail panel. */
+  :root {
+    --bg: #eef0ea;
+    --surface: #f9faf6;
+    --fg: #1c211b;
+    --muted: #566052;
+    --line: #cbd2c4;
+    --accent: #3f7d2a;
+    --accent-fg: #ffffff;
+    --discord: #5865f2;
+    --discord-fg: #ffffff;
+    --grass: #5fa13f;
+    --dirt: #7a5a3a;
+    --font-display: "Pixelify Sans", "Courier New", monospace;
+    --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141813;
+      --surface: #1d231b;
+      --fg: #e6ebe0;
+      --muted: #9aa593;
+      --line: #323b2f;
+      --accent: #7bc05a;
+      --accent-fg: #10170c;
+      --grass: #6fb34c;
+      --dirt: #8a6844;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141813;
+    --surface: #1d231b;
+    --fg: #e6ebe0;
+    --muted: #9aa593;
+    --line: #323b2f;
+    --accent: #7bc05a;
+    --accent-fg: #10170c;
+    --grass: #6fb34c;
+    --dirt: #8a6844;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.55;
+    padding-block: 48px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 48px; }
+
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 700; margin: 0; text-wrap: balance; line-height: 1.1; }
+  h1 { font-size: clamp(2.4rem, 8vw, 3.6rem); letter-spacing: 0.01em; }
+  h2 { font-size: 1.5rem; }
+  h3 { font-size: 1.2rem; }
+  p { margin: 0; }
+
+  .eyebrow { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+  /* Hero */
+  .hero { display: flex; flex-direction: column; gap: 20px; align-items: flex-start; }
+  .hero p { max-width: 52ch; color: var(--muted); font-size: 1.1rem; }
+
+  /* Live server status line, shown only once the status API answers */
+  .status { margin: 0; display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .status[hidden] { display: none; }
+  .status .dot { width: 10px; height: 10px; flex: none; border-radius: 1px; background: var(--muted); }
+  .status.is-online { color: var(--fg); }
+  .status.is-online .dot { background: var(--accent); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    font: 600 1rem/1 var(--font-body);
+    padding: 14px 20px; border-radius: 4px; border: 2px solid transparent;
+    text-decoration: none; cursor: pointer;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.28);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  .btn:hover { transform: translateY(1px); box-shadow: 0 3px 0 rgba(0,0,0,0.28); }
+  .btn:active { transform: translateY(4px); box-shadow: 0 0 0 rgba(0,0,0,0.28); }
+  .btn:focus-visible, .copy:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .btn-discord { background: var(--discord); color: var(--discord-fg); }
+  .btn svg { width: 22px; height: 22px; fill: currentColor; flex: none; }
+
+  /* Server list */
+  .list { display: flex; flex-direction: column; gap: 16px; }
+  .list-head { display: flex; flex-direction: column; gap: 6px; }
+  .list-head p { color: var(--muted); }
+
+  .server { background: var(--surface); border: 2px solid var(--line); border-radius: 4px; padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+  .server-top { display: flex; gap: 16px; align-items: center; }
+  .icon {
+    width: 56px; height: 56px; flex: none; border-radius: 2px;
+    background:
+      linear-gradient(var(--grass) 0 32%, transparent 32%),
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.12) 0 6px, transparent 6px 12px),
+      var(--dirt);
+    image-rendering: pixelated;
+  }
+  .icon-img { background: none; object-fit: contain; image-rendering: auto; display: block; }
+  .server-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .server-title p { color: var(--muted); font-size: 0.95rem; }
+  .tags { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; justify-content: flex-end; }
+  .tag { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.04em; border: 1.5px solid var(--line); border-radius: 2px; padding: 3px 8px; color: var(--muted); white-space: nowrap; }
+  .tag.mod { border-color: var(--accent); color: var(--accent); }
+
+  .address { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+  .addr {
+    flex: 1 1 220px; min-width: 0;
+    font-family: var(--font-mono); font-size: 1rem;
+    background: var(--bg); border: 2px solid var(--line); border-radius: 2px;
+    padding: 11px 14px; overflow-wrap: anywhere; user-select: all;
+  }
+  .copy {
+    flex: 0 0 auto; min-width: 96px;
+    font: 600 0.95rem/1 var(--font-body);
+    background: var(--accent); color: var(--accent-fg);
+    border: 0; border-radius: 2px; padding: 0 18px; min-height: 44px; cursor: pointer;
+    box-shadow: 0 3px 0 rgba(0,0,0,0.28);
+  }
+  .copy:active { transform: translateY(3px); box-shadow: none; }
+
+  /* Modpack panel */
+  .pack { border-top: 2px dashed var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 16px; }
+  .pack-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px 20px; margin: 0; }
+  .pack-grid div { min-width: 0; }
+  .pack-grid dt { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .pack-grid dd { margin: 2px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+  .steps { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 6px; }
+  .steps li::marker { font-family: var(--font-mono); color: var(--accent); }
+  .pack a { color: var(--accent); font-weight: 600; text-underline-offset: 3px; }
+  .mods { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; list-style: none; }
+  .mods li { font-size: 0.85rem; background: var(--bg); border: 1.5px solid var(--line); border-radius: 2px; padding: 3px 9px; }
+  .pack-label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+
+  footer { color: var(--muted); font-size: 0.9rem; border-top: 2px solid var(--line); padding-top: 20px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 520px) {
+    .server-top { flex-wrap: wrap; }
+    .tags { margin-left: 0; justify-content: flex-start; width: 100%; }
+    .copy { flex: 1 1 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <span class="eyebrow">Minecraft community</span>
+    <h1>Jake's Games</h1>
+    <a class="btn btn-discord" href="https://discord.gg/ZhrNWQfyhT" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.2.5a18.3 18.3 0 0 0-6.4 0L8.6 3a19.8 19.8 0 0 0-4.9 1.4C.6 9 0 13.5.3 18a19.9 19.9 0 0 0 6 3l1.3-2.1c-.7-.3-1.4-.6-2-1l.5-.4a14.2 14.2 0 0 0 11.8 0l.5.4c-.6.4-1.300.7-2 1L17.700 21a19.900 19.900 0 0 0 6-3c.4-5.200-.7-9.700-3.400-13.600ZM8.700 15.300c-1.200 0-2.100-1.100-2.100-2.400s.9-2.400 2.100-2.400 2.100 1.100 2.100 2.400-.9 2.400-2.100 2.400Zm6.600 0c-1.200 0-2.100-1.100-2.100-2.400s.9-2.400 2.100-2.400 2.100 1.100 2.100 2.400-.9 2.400-2.100 2.400Z"/></svg>
+      Join our Discord
+    </a>  </header>
+
+  <main class="list">
+    <div class="list-head">
+      <h2>Servers</h2>
+      <p>Copy an address, then add it in Minecraft. On Bedrock Edition, go to Play, Servers, Add Server. On Java Edition, go to Multiplayer, Add Server.</p>
+    </div>
+
+    <section class="server" aria-labelledby="s1">
+      <div class="server-top">
+        <div class="icon" aria-hidden="true"></div>
+        <div class="server-title">
+          <h3 id="s1">Survival</h3>
+          <p>Vanilla survival with a friendly spawn town.</p>
+        </div>
+        <div class="tags"><span class="tag">Bedrock</span><span class="tag">Vanilla</span></div>
+      </div>
+      <div class="address">
+        <code class="addr" id="a1">bedrockmc.jakesgames.xyz</code>
+        <button class="copy" type="button" data-target="a1">Copy</button>
+      </div>    </section>
+
+    <section class="server" aria-labelledby="s3">
+      <div class="server-top">
+        <img class="icon icon-img" src="data:image/png;base64,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" alt="Homestead logo" width="56" height="56">
+        <div class="server-title">
+          <h3 id="s3">Homestead</h3>
+          <p>Cozy modded survival. You need the Homestead modpack to join.</p>
+        </div>
+        <div class="tags"><span class="tag">Java 1.20.1</span><span class="tag mod">Modpack</span></div>
+      </div>
+      <div class="address">
+        <code class="addr" id="a3">homesteadmc.jakesgames.xyz</code>
+        <button class="copy" type="button" data-target="a3">Copy</button>
+      </div>
+      <p class="status" data-addr-id="a3" data-edition="java" hidden></p>
+
+      <div class="pack">
+        <dl class="pack-grid">
+          <div><dt>Modpack</dt><dd>Homestead</dd></div>
+          <div><dt>Author</dt><dd>Toekimi</dd></div>
+          <div><dt>Mod loader</dt><dd>Fabric</dd></div>
+          <div><dt>Minecraft</dt><dd>1.20.1</dd></div>
+          <div><dt>RAM</dt><dd>6 to 8 GB</dd></div>
+          <div><dt>Quests</dt><dd>709 in 27 chapters</dd></div>
+        </dl>
+
+        <div>
+          <p class="pack-label">Install</p>
+          <ol class="steps">
+            <li>Get Homestead from <a href="https://modrinth.com/modpack/homestead" target="_blank" rel="noopener">Modrinth</a> or <a href="https://www.curseforge.com/minecraft/modpacks/homestead-cozy" target="_blank" rel="noopener">CurseForge</a>, and import it into the matching app as a new instance.</li>
+            <li>Give the instance 6 to 8 GB of memory. More than about 10 GB can make it run worse.</li>
+            <li>Launch it once, then add the server address above in Multiplayer. The modpack is Java Edition only.</li>
+          </ol>
+        </div>
+
+        <div>
+          <p class="pack-label">Some of what's in it</p>
+          <ul class="mods">
+            <li>Create</li><li>Sophisticated Storage</li><li>Tectonic</li><li>Mushlings</li><li>Chipped</li><li>Cluttered</li><li>Complementary Reimagined</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Not affiliated with Mojang or Microsoft. Need help joining? Ask in the Discord.</footer>
+</div>
+<span class="sr" id="live" role="status" aria-live="polite"></span>
+
+<script>
+  (function () {
+    var live = document.getElementById("live");
+    function selectText(el) {
+      var r = document.createRange();
+      r.selectNodeContents(el);
+      var s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+    }
+    document.querySelectorAll(".copy").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var el = document.getElementById(btn.dataset.target);
+        var text = el.textContent.trim();
+        function done(msg) {
+          btn.textContent = msg;
+          live.textContent = msg === "Copied" ? "Address copied" : "Address selected, press copy on your keyboard";
+          setTimeout(function () { btn.textContent = "Copy"; }, 1800);
+        }
+        try {
+          navigator.clipboard.writeText(text).then(function () { done("Copied"); }, function () { selectText(el); done("Selected"); });
+        } catch (e) {
+          selectText(el);
+          done("Selected");
+        }
+      });
+    });
+  })();
+
+  // Live server status from the public mcstatus.io API. If the request is
+  // blocked or fails, the status line simply stays hidden.
+  (function () {
+    document.querySelectorAll(".status").forEach(function (el) {
+      var addr = document.getElementById(el.dataset.addrId).textContent.trim();
+      var url = "https://api.mcstatus.io/v2/status/java/" + addr;
+      function show(online, text) {
+        el.className = "status " + (online ? "is-online" : "is-offline");
+        el.textContent = "";
+        var dot = document.createElement("span");
+        dot.className = "dot";
+        dot.setAttribute("aria-hidden", "true");
+        var label = document.createElement("span");
+        label.textContent = text;
+        el.appendChild(dot);
+        el.appendChild(label);
+        el.hidden = false;
+      }
+      try {
+        fetch(url)
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+          .then(function (d) {
+            if (!d.online) { show(false, "Offline right now"); return; }
+            var parts = ["Online"];
+            if (d.players && typeof d.players.online === "number") {
+              parts.push(d.players.online + (typeof d.players.max === "number" ? " of " + d.players.max : "") + " players");
+            }
+            var v = typeof d.version === "string" ? d.version : (d.version && (d.version.name_clean || d.version.name));
+            if (v) parts.push(v);
+            show(true, parts.join(" · "));
+          })
+          .catch(function () {});
+      } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>
